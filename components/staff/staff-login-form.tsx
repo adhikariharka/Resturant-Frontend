@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ChefHat, Loader2, Lock, User, Utensils, Bike, ShieldCheck } from "lucide-react"
+import { ChefHat, Loader2, Lock, Mail, Utensils, Bike, ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
 import { API_URL } from "@/lib/store/api"
 import { saveStaffSession } from "@/lib/staff-auth"
@@ -16,7 +16,7 @@ import { saveStaffSession } from "@/lib/staff-auth"
 export function StaffLoginForm() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
-  const [username, setUsername] = useState("")
+  const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -27,7 +27,7 @@ export function StaffLoginForm() {
       const res = await fetch(`${API_URL}/staff/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: username.trim().toLowerCase(), password }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
       })
       const data = await res.json()
 
@@ -38,6 +38,7 @@ export function StaffLoginForm() {
 
       saveStaffSession({
         id: data.staff.id,
+        email: data.staff.email,
         name: data.staff.name,
         role: data.staff.role,
         permissions: data.staff.permissions || [],
@@ -69,19 +70,20 @@ export function StaffLoginForm() {
         <Card className="shadow-xl border-border/60">
           <CardHeader className="pb-4">
             <CardTitle className="text-lg">Sign in</CardTitle>
-            <CardDescription>Enter your staff credentials to access the kitchen dashboard.</CardDescription>
+            <CardDescription>Use the email we gave you at the restaurant.</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="staff-username">Username</Label>
+                <Label htmlFor="staff-email">Email</Label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    id="staff-username"
-                    placeholder="e.g. kitchen_01"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
+                    id="staff-email"
+                    type="email"
+                    placeholder="you@thebritishkitchen.co.uk"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     className="pl-9"
                     autoComplete="username"
                     required

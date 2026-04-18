@@ -36,8 +36,10 @@ import { toast } from "sonner"
 import { useGetStaffQuery, useCreateStaffMutation } from "@/lib/store/api"
 
 const staffSchema = z.object({
-    username: z.string().min(3, "Username must be at least 3 characters"),
+    name: z.string().min(2, "Name must be at least 2 characters"),
+    email: z.string().email("Please enter a valid email"),
     password: z.string().min(6, "Password must be at least 6 characters"),
+    phone: z.string().optional(),
     permissions: z.array(z.string()).refine((value) => value.length > 0, {
         message: "You must select at least one role.",
     }),
@@ -56,32 +58,37 @@ const StaffManagementPage = () => {
     const form = useForm<StaffFormValues>({
         resolver: zodResolver(staffSchema),
         defaultValues: {
-            username: "",
+            name: "",
+            email: "",
             password: "",
+            phone: "",
             permissions: [],
         },
     })
 
     // Filter staff based on search query
-    const filteredStaff = staffList.filter((staff: any) =>
-        staff.username.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    const filteredStaff = staffList.filter((staff: any) => {
+        const q = searchQuery.toLowerCase()
+        return (
+            (staff.email || "").toLowerCase().includes(q) ||
+            (staff.name || "").toLowerCase().includes(q)
+        )
+    })
 
     const onSubmit = async (data: StaffFormValues) => {
         try {
             await createStaff({
                 ...data,
-                name: data.username,
-                role: 'staff'
+                email: data.email.toLowerCase(),
+                role: 'staff',
             }).unwrap()
             toast.success("Staff member created successfully")
             form.reset()
         } catch (err: any) {
-            // Check for conflict error (409)
             if (err.status === 409) {
-                toast.error("Username is already taken")
+                toast.error("An account with that email already exists")
             } else {
-                toast.error("Failed to create staff member")
+                toast.error(err?.data?.message || "Failed to create staff member")
             }
         }
     }
@@ -115,12 +122,41 @@ const StaffManagementPage = () => {
                             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                                 <FormField
                                     control={form.control}
-                                    name="username"
+                                    name="name"
                                     render={({ field }: { field: any }) => (
                                         <FormItem>
-                                            <FormLabel>Username</FormLabel>
+                                            <FormLabel>Full name</FormLabel>
                                             <FormControl>
-                                                <Input placeholder="e.g. chef_john" {...field} />
+                                                <Input placeholder="e.g. John Smith" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="email"
+                                    render={({ field }: { field: any }) => (
+                                        <FormItem>
+                                            <FormLabel>Email</FormLabel>
+                                            <FormControl>
+                                                <Input type="email" placeholder="chef@thebritishkitchen.co.uk" {...field} />
+                                            </FormControl>
+                                            <FormDescription>
+                                                Staff sign in with this email.
+                                            </FormDescription>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="phone"
+                                    render={({ field }: { field: any }) => (
+                                        <FormItem>
+                                            <FormLabel>Phone (optional)</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="+44 7700 900000" {...field} />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -131,7 +167,7 @@ const StaffManagementPage = () => {
                                     name="password"
                                     render={({ field }: { field: any }) => (
                                         <FormItem>
-                                            <FormLabel>Password</FormLabel>
+                                            <FormLabel>Initial password</FormLabel>
                                             <FormControl>
                                                 <Input type="text" placeholder="e.g. secret123" {...field} />
                                             </FormControl>
@@ -153,7 +189,7 @@ const StaffManagementPage = () => {
                                                     Select the areas this staff member can access.
                                                 </FormDescription>
                                             </div>
-                                            <div className="flex flex-col gap-2"> {/* Checkboxes */}
+                                            <div className="flex flex-col gap-2">
                                                 <FormField
                                                     key="kitchen"
                                                     control={form.control}
@@ -277,7 +313,7 @@ const StaffManagementPage = () => {
                             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                             <Input
                                 type="search"
-                                placeholder="Search staff..."
+                                placeholder="Search staff…"
                                 className="pl-8"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -297,14 +333,16 @@ const StaffManagementPage = () => {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead className="w-[150px]">Username</TableHead>
+                                            <TableHead>Name</TableHead>
+                                            <TableHead>Email</TableHead>
                                             <TableHead>Roles</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {filteredStaff.map((staff: any) => (
                                             <TableRow key={staff.id}>
-                                                <TableCell className="font-medium">{staff.username}</TableCell>
+                                                <TableCell className="font-medium">{staff.name}</TableCell>
+                                                <TableCell className="text-muted-foreground">{staff.email}</TableCell>
                                                 <TableCell>
                                                     <div className="flex gap-1 flex-wrap">
                                                         {staff.permissions && Array.isArray(staff.permissions) && staff.permissions.map((p: string) => (
