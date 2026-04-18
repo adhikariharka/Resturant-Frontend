@@ -3,11 +3,32 @@ import { getSession } from 'next-auth/react';
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+// Staff sessions live in localStorage (separate auth path from NextAuth).
+// We prefer the staff token when present so kitchen / delivery / staff-admin
+// accounts hit the backend as themselves from admin / staff pages alike.
+const STAFF_STORAGE_KEY = 'harke_staff_session';
+function readStaffToken(): string | null {
+    if (typeof window === 'undefined') return null;
+    const raw = window.localStorage.getItem(STAFF_STORAGE_KEY);
+    if (!raw) return null;
+    try {
+        const parsed = JSON.parse(raw);
+        return typeof parsed?.token === 'string' ? parsed.token : null;
+    } catch {
+        return null;
+    }
+}
+
 export const apiSlice = createApi({
     reducerPath: 'api',
     baseQuery: fetchBaseQuery({
         baseUrl: API_URL,
         prepareHeaders: async (headers) => {
+            const staffToken = readStaffToken();
+            if (staffToken) {
+                headers.set('authorization', `Bearer ${staffToken}`);
+                return headers;
+            }
             const session = await getSession();
             if (session && (session as any).accessToken) {
                 headers.set('authorization', `Bearer ${(session as any).accessToken}`);

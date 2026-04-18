@@ -4,15 +4,47 @@ import type React from "react"
 
 import { useState } from "react"
 import Link from "next/link"
-import { Eye, EyeOff, Mail, Lock } from "lucide-react"
+import { Eye, EyeOff, Mail, Lock, ChefHat, ShieldCheck, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
 
-import { signIn, getSession } from "next-auth/react"
+import { signIn, signOut, getSession } from "next-auth/react"
 import { toast } from "sonner"
 import { useGoogleLogin } from "@react-oauth/google"
+import { API_URL } from "@/lib/store/api"
+import { saveStaffSession, clearStaffSession } from "@/lib/staff-auth"
+
+/**
+ * Unified sign-in:
+ *   1. Try the staff endpoint first (kitchen / delivery / staff-admin).
+ *   2. Fall back to NextAuth credentials (customer / user-admin).
+ * Route the user to the right place on success:
+ *   - staff with admin role  -> /admin
+ *   - staff (kitchen/delivery) -> /staff
+ *   - user with admin role  -> /admin
+ *   - user (customer)        -> /
+ */
+async function tryStaffLogin(email: string, password: string) {
+  try {
+    const res = await fetch(`${API_URL}/staff/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    })
+    if (!res.ok) return { ok: false as const, res }
+    const data = await res.json()
+    return {
+      ok: true as const,
+      data: data as {
+        access_token: string
+        staff: { id: string; email: string; name: string; role: "staff" | "admin"; permissions: string[] }
+      },
+    }
+  } catch {
+    return { ok: false as const, res: null }
+  }
+}
 
 export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false)
@@ -22,6 +54,8 @@ export function LoginForm() {
     onSuccess: async (tokenResponse) => {
       try {
         setIsLoading(true)
+        // Google users are always customers/admins (no staff Google path).
+        clearStaffSession()
         const result = await signIn("credentials", {
           googleToken: tokenResponse.access_token,
           redirect: false,
@@ -30,57 +64,62 @@ export function LoginForm() {
         if (result?.error) {
           toast.error("Google authentication failed")
         } else {
-          toast.success("Login successful")
+          toast.success("Signed in")
           const session = await getSession()
-          const userRole = (session?.user as any)?.role
-          if (userRole === "admin") {
-            window.location.href = "/admin"
-          } else {
-            window.location.href = "/"
-          }
+          const role = (session?.user as any)?.role
+          window.location.href = role === "admin" ? "/admin" : "/"
         }
-      } catch (error) {
+      } catch {
         toast.error("Google authentication failed")
       } finally {
         setIsLoading(false)
       }
     },
-    onError: () => {
-      toast.error("Google login failed")
-    },
+    onError: () => toast.error("Google login failed"),
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    const formData = new FormData(e.target as HTMLFormElement)
+    const email = (formData.get("email") as string).trim().toLowerCase()
+    const password = formData.get("password") as string
+    if (!email || !password) return
+
     setIsLoading(true)
 
-    const formData = new FormData(e.target as HTMLFormElement)
-    const email = formData.get("email") as string
-    const password = formData.get("password") as string
-
-    try {
-      const result = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
+    // 1. Staff first
+    const staff = await tryStaffLogin(email, password)
+    if (staff.ok) {
+      // Clear any lingering NextAuth session so the two auth paths don't coexist.
+      try { await signOut({ redirect: false }) } catch { /* noop */ }
+      saveStaffSession({
+        id: staff.data.staff.id,
+        email: staff.data.staff.email,
+        name: staff.data.staff.name,
+        role: staff.data.staff.role,
+        permissions: staff.data.staff.permissions ?? [],
+        token: staff.data.access_token,
       })
+      toast.success(`Welcome, ${staff.data.staff.name}`)
+      setIsLoading(false)
+      // Staff-admin lands in the admin dashboard; other staff go to the kitchen.
+      window.location.href = staff.data.staff.role === "admin" ? "/admin" : "/staff"
+      return
+    }
 
+    // 2. Fall back to customer / user-admin via NextAuth.
+    clearStaffSession()
+    try {
+      const result = await signIn("credentials", { email, password, redirect: false })
       if (result?.error) {
-        toast.error("Invalid credentials")
-      } else {
-        toast.success("Login successful")
-
-        // Fetch session to determine role for redirect
-        const session = await getSession()
-
-        const userRole = (session?.user as any)?.role
-        if (userRole === 'admin') {
-          window.location.href = "/admin"
-        } else {
-          window.location.href = "/" // Keep users on landing page
-        }
+        toast.error("Invalid email or password")
+        return
       }
-    } catch (err) {
+      toast.success("Signed in")
+      const session = await getSession()
+      const role = (session?.user as any)?.role
+      window.location.href = role === "admin" ? "/admin" : "/"
+    } catch {
       toast.error("Login failed")
     } finally {
       setIsLoading(false)
@@ -90,22 +129,33 @@ export function LoginForm() {
   return (
     <div className="w-full max-w-md">
       <div className="text-center mb-8">
-        <h1 className="font-serif text-3xl font-semibold text-foreground mb-2">Welcome Back</h1>
-        <p className="text-muted-foreground">Sign in to continue ordering your favourites</p>
+        <div className="mx-auto w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center mb-4">
+          <User className="h-7 w-7 text-primary" />
+        </div>
+        <h1 className="font-serif text-3xl font-semibold text-foreground mb-2">Welcome back</h1>
+        <p className="text-muted-foreground">
+          Sign in with your email — we&rsquo;ll take you to the right place.
+        </p>
       </div>
 
-      <div className="bg-card border border-border rounded-2xl p-6 md:p-8">
+      <div className="bg-card border border-border rounded-2xl p-6 md:p-8 shadow-sm">
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Email */}
           <div>
             <Label htmlFor="email">Email</Label>
             <div className="relative mt-1.5">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input name="email" id="email" type="email" placeholder="you@example.com" className="pl-10" required />
+              <Input
+                name="email"
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                className="pl-10"
+                autoComplete="email"
+                required
+              />
             </div>
           </div>
 
-          {/* Password */}
           <div>
             <div className="flex items-center justify-between">
               <Label htmlFor="password">Password</Label>
@@ -121,33 +171,25 @@ export function LoginForm() {
                 type={showPassword ? "text" : "password"}
                 placeholder="••••••••"
                 className="pl-10 pr-10"
+                autoComplete="current-password"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                aria-label={showPassword ? "Hide password" : "Show password"}
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
           </div>
 
-          {/* Remember me */}
-          {/* <div className="flex items-center gap-2">
-            <Checkbox id="remember" />
-            <Label htmlFor="remember" className="text-sm font-normal cursor-pointer">
-              Remember me for 30 days
-            </Label>
-          </div> */}
-
-          {/* Submit */}
           <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
-            {isLoading ? "Signing in..." : "Sign In"}
+            {isLoading ? "Signing in..." : "Sign in"}
           </Button>
         </form>
 
-        {/* Divider */}
         <div className="relative my-6">
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-border" />
@@ -157,9 +199,13 @@ export function LoginForm() {
           </div>
         </div>
 
-        {/* Social login */}
-        {/* Social login */}
-        <Button variant="outline" className="w-full gap-2 bg-transparent" type="button" onClick={() => handleGoogleLogin()}>
+        <Button
+          variant="outline"
+          className="w-full gap-2 bg-transparent"
+          type="button"
+          onClick={() => handleGoogleLogin()}
+          disabled={isLoading}
+        >
           <svg className="w-4 h-4" viewBox="0 0 24 24">
             <path
               fill="currentColor"
@@ -181,13 +227,28 @@ export function LoginForm() {
           Continue with Google
         </Button>
 
-        {/* Sign up link */}
         <p className="text-center text-sm text-muted-foreground mt-6">
-          Don't have an account?{" "}
+          New here?{" "}
           <Link href="/signup" className="text-primary hover:underline font-medium">
-            Sign up
+            Create an account
           </Link>
         </p>
+      </div>
+
+      {/* Role hints — tiny legend so staff know they can use this page too */}
+      <div className="grid grid-cols-3 gap-2 text-xs mt-6">
+        <div className="flex items-center gap-2 p-2.5 rounded-xl bg-card border border-border/50">
+          <User className="h-3.5 w-3.5 text-primary" />
+          <span className="text-muted-foreground">Customer</span>
+        </div>
+        <div className="flex items-center gap-2 p-2.5 rounded-xl bg-card border border-border/50">
+          <ChefHat className="h-3.5 w-3.5 text-orange-600" />
+          <span className="text-muted-foreground">Kitchen / Delivery</span>
+        </div>
+        <div className="flex items-center gap-2 p-2.5 rounded-xl bg-card border border-border/50">
+          <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+          <span className="text-muted-foreground">Admin</span>
+        </div>
       </div>
     </div>
   )

@@ -120,7 +120,7 @@ export function StaffDashboardContent() {
     useEffect(() => {
         const existing = getStaffSession()
         if (!existing) {
-            router.replace("/staff/login")
+            router.replace("/login")
             return
         }
         setSession(existing)
@@ -139,7 +139,7 @@ export function StaffDashboardContent() {
                 if (res.status === 401) {
                     clearStaffSession()
                     toast.error("Session expired. Please sign in again.")
-                    router.replace("/staff/login")
+                    router.replace("/login")
                     return
                 }
                 if (!res.ok) {
@@ -274,7 +274,7 @@ export function StaffDashboardContent() {
     const logout = () => {
         clearStaffSession()
         toast.success("Signed out")
-        router.replace("/staff/login")
+        router.replace("/login")
     }
 
     // ------- Derived: filtering & stats -------
