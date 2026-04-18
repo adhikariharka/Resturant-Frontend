@@ -2,7 +2,7 @@ import type React from "react"
 import type { Metadata } from "next"
 
 export const metadata: Metadata = {
-  title: "Staff Dashboard | The British Kitchen",
+  title: "Kitchen Console | The British Kitchen",
   description: "Staff order management dashboard",
 }
 
