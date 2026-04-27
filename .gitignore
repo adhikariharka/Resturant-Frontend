@@ -31,3 +31,8 @@ bun.lockb
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
