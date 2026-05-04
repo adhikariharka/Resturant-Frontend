@@ -166,6 +166,8 @@ npm run dev
 # -> http://localhost:3000
 ```
 
+> Start the backend (`Resturant-Backend`) before running the frontend — auth, menu, and order requests all flow through `NEXT_PUBLIC_API_URL` and will surface as network errors if the API is down.
+
 ---
 
 ## Environment variables
