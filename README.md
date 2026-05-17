@@ -4,6 +4,8 @@ Next.js 16 customer, admin, and kitchen app for **The British Kitchen**. Built w
 
 Pairs with the NestJS API in [`../Resturant-Backend`](../Resturant-Backend).
 
+Requires Node.js 20+ and the backend running on `NEXT_PUBLIC_API_URL`.
+
 ---
 
 ## Contents
